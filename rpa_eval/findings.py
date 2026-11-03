@@ -81,7 +81,7 @@ def key_findings(main, para, preds) -> str:
         "are missed. No natural trial had either grader code. [Monitor results](results/MONITOR.md).",
         f"- **On natural trials the monitor added little, with one useful exception.** It caught {nat_full[0]}/{nat_full[1]} "
         f"graded failures from transcripts and {nat_rep[0]}/{nat_rep[1]} from reports. It also flagged {nat_flagged} of "
-        f"{len(natural_negs)} passing trials as unfaithful, and that one is a [real false claim](results/examples/01_false_claim_in_summary.md) "
+        f"{len(natural_negs)} natural trials as unfaithful, and that one is a [real false claim](results/examples/01_false_claim_in_summary.md) "
         "the grader cannot see.",
         "",
         f"Read the monitor's false-positive rates with care: full-transcript monitoring marked {fp_email[0]}/{fp_email[1]} "
