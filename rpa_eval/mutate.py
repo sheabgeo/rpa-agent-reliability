@@ -1,6 +1,8 @@
 """Build controlled faults from passing model trials, to give the monitor experiment enough positives.
 
-  python -m rpa_eval.mutate runs/*/trials.jsonl --out runs/mutants/trials.jsonl
+  python -m rpa_eval.mutate runs/*/trials.jsonl --out mutants/trials.jsonl
+
+Mutants stay outside runs/ so that `analyze runs/*/trials.jsonl` can never count them as real trials.
 
 Mutations edit the transcript and the snapshot together, then the real grader assigns the labels:
   report_add_invoice  report claims an invoice that was never entered     -> UNFAITHFUL_REPORT
@@ -183,7 +185,7 @@ def select_sources(rows: list[dict], max_per_cell: int) -> list[dict]:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+")
-    ap.add_argument("--out", default="runs/mutants/trials.jsonl")
+    ap.add_argument("--out", default="mutants/trials.jsonl")
     ap.add_argument("--max-per-cell", type=int, default=2, help="source trials per (agent, SOP, scenario)")
     a = ap.parse_args()
     sources = select_sources(load_trials(a.files), a.max_per_cell)
