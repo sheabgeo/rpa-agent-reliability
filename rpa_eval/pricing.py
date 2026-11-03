@@ -16,13 +16,28 @@ PRICES_PER_MTOK = {
 }
 
 
+def add_usage(total: dict, resp_usage) -> dict:
+    """Add one API response's usage to a running total. Cache fields are kept so that no billed token goes uncounted."""
+    written = getattr(resp_usage, "cache_creation_input_tokens", 0) or 0
+    read = getattr(resp_usage, "cache_read_input_tokens", 0) or 0
+    total["input_tokens"] = total.get("input_tokens", 0) + resp_usage.input_tokens
+    total["output_tokens"] = total.get("output_tokens", 0) + resp_usage.output_tokens
+    total["cache_creation_input_tokens"] = total.get("cache_creation_input_tokens", 0) + written
+    total["cache_read_input_tokens"] = total.get("cache_read_input_tokens", 0) + read
+    total["max_prompt_tokens"] = max(total.get("max_prompt_tokens", 0), resp_usage.input_tokens + written + read)
+    return total
+
+
 def cost_usd(model: str, usage: dict | None) -> float | None:
     """Estimated USD for one usage record. 0 if no tokens were used, None if the model has no known price."""
     ti = (usage or {}).get("input_tokens", 0)
     to = (usage or {}).get("output_tokens", 0)
-    if not ti and not to:
+    written = (usage or {}).get("cache_creation_input_tokens", 0)
+    read = (usage or {}).get("cache_read_input_tokens", 0)
+    if not ti and not to and not written and not read:
         return 0.0
     if model not in PRICES_PER_MTOK:
         return None
     pi, po = PRICES_PER_MTOK[model]
-    return (ti * pi + to * po) / 1_000_000
+    # Standard 5-minute cache rates: writes at 1.25x input, reads at 0.1x. The harness does not ask for caching.
+    return ((ti + 1.25 * written + 0.1 * read) * pi + to * po) / 1_000_000

@@ -2,37 +2,56 @@
 
 ## Status (2026-11-03)
 
-**No model has been run, so there are no findings yet.** `ANTHROPIC_API_KEY` is not set in the environment, and
-`gh` is not installed. All work that needs neither is finished and tested. Nothing in this repo reports a model result.
+**In progress. The key and `gh` are now available, and Phase 1 is next.** No experiment trial has been run yet, so
+there are no findings. This table is updated as each phase finishes.
 
 | Phase | Step | State |
 |---|---|---|
-| 0 | Install, grader tests, oracle and naive baselines | Done: tests pass, oracle 12/12, naive 0/12 |
-| 0 | Confirm model IDs with a 1-token call | **Blocked: no API key** |
+| 0 | Install, grader tests, oracle and naive baselines | Done |
+| 0 | Confirm model IDs with a 1-token call | Done: `claude-haiku-5-5` and `claude-sonnet-5-5` both accepted |
 | 0 | `pricing.py`, `regrade.py`, cost table in `analyze.py` | Done |
-| 0 | `gh repo create` and push | **Blocked: `gh` not installed.** Commits are local only |
-| 1 | Cost calibration and projection | **Blocked: no API key** |
-| 2 | Main experiment and ablation | **Blocked: no API key** |
-| 3 | `monitor.py`, `mutate.py` | Code done, tested offline with fake clients |
-| 3 | Monitor experiment | **Blocked: needs Phase 2 trials and a key** |
-| 4 | `scenarios_paraphrase.py` (24 variants) | Done: oracle 24/24, naive 0/24 |
-| 4 | Sonnet arm on the paraphrases | **Blocked: no API key** |
-| 5 | Report, monitor table, examples, README findings | **Blocked: needs results** |
-| 5 | Fresh-clone check | Done for the offline commands. Repeat at the end |
+| 0 | Budget guard, `rpa_eval/budget.py` | Done |
+| 0 | `gh repo create` and push | Next |
+| 1 | Cost calibration and projection | Not started |
+| 2 | Main experiment and ablation | Not started |
+| 3 | Monitor experiment | Code done and tested offline only |
+| 4 | Sonnet arm on the paraphrases | Not started; runs only if budget remains |
+| 5 | Report, monitor table, examples, README findings | Not started |
 
-## Spend
+## Budget log
 
-| Phase | USD |
-|---|---|
-| All phases so far | $0.00 (no API calls made) |
-| **Total against the $40 budget** | **$0.00** |
+**Cap: $20.00 total, including anything already spent.** The author set this on 2026-11-03. `CLAUDE.md` still reads
+`BUDGET_USD = 40` because the author's edit does not appear in the file. The author's message is the later and
+stricter instruction, so `rpa_eval/budget.py` enforces $20 and `CLAUDE.md` was left for the author to change.
+
+Spend is an estimate from stored token usage and `pricing.py`, not an invoice.
+
+Rules applied before every phase:
+
+1. Run `python -m rpa_eval.budget status` for the cost so far, and project the next phase as mean measured cost x
+   planned count, plus a 25% margin.
+2. Start a run only if spent + projected is at or under $20.
+3. If it is not, cut scope in this order: reduce `TRIALS` from 5 toward the minimum of 3, then drop arms, lowest
+   priority first.
+4. Pass `--max-usd` to each run as a backstop, set low enough that trials already in flight cannot cross the cap.
+
+Arm priority, highest first. `CLAUDE.md` makes the last two conditional on remaining budget, so they run only with
+what the core leaves:
+
+1. Sonnet main arm (RQ1, and the source of monitor trials)
+2. Monitor experiment on the trials collected, including `report_only` vs. `full_transcript` (the key contribution)
+3. Haiku main arm (RQ4)
+4. Sonnet ablation (RQ2)
+5. Phase 4 paraphrases
+6. Phase 2b Opus arm
+
+| When | Spent so far | Next step | Projected, with margin | Decision |
+|---|---|---|---|---|
+| Before Phase 0 ID check | $0.00 | 2 x 1-token calls | under $0.01 | Go |
 
 ## Resuming
 
-1. Set `ANTHROPIC_API_KEY` in the environment.
-2. Install `gh` and run `gh auth login`.
-3. Ask Claude Code to continue from `CLAUDE.md`. The next step is Phase 0, step 2 (model ID check), then
-   the repo push, then Phase 1.
+Run `python -m rpa_eval.budget status`, then continue from the first unfinished phase above.
 
 ## Decisions
 
@@ -40,14 +59,16 @@ Everything below was decided **before any model output existed**, so none of it 
 
 ### Blockers
 
-- **Credentials: stopped at the environment variable.** CLAUDE.md rule 5 says the key comes from the environment
-  only, so I did not look for keys in `.env` files, user or machine variables, or `ant` login profiles.
+- **Credentials: environment variable only.** CLAUDE.md rule 5 says the key comes from the environment. I did not
+  look in `.env` files or `ant` login profiles. After the author said the key was set, it was found in the Windows
+  user environment, not in the already-running process, so each command loads that one variable from there. It is
+  never printed or written to disk.
 - **Did not smoke-test the real run path without a key.** The SDK falls back to any stored login profile when the
   variable is unset, so a "harmless" test could have spent money on a credential the project excludes.
 - **Did not simulate the experiment.** Claude Code subagents could imitate the agent arms, but they run with a
   different system prompt, tools and harness, so they would not measure what the study claims to measure.
-- **Did not install `gh`.** CLAUDE.md covers an unauthenticated `gh` by telling the author and carrying on, and
-  I applied that to a missing `gh`. Creating a public repo should use a login the author set up.
+- **Did not install `gh`.** The author later installed and authenticated it. It was not on this process's PATH, so
+  commands add its install folder to PATH.
 - **Committed directly to `main`.** Existing history is on `main`, and the Phase 0 push command publishes the
   current branch. Git has no configured identity here, so commits use the existing author identity (SG) per
   command, without changing git config.
@@ -72,6 +93,13 @@ These change `run.py` and `env.py`. Graders and the 12 base scenarios are untouc
   it separately rather than calling it a task failure.
 - **Left effort and thinking at each model's default.** Defaults differ (Sonnet 5.5 `high`, Haiku 5.5 `medium`), so a
   Haiku vs. Sonnet comparison is of each model as shipped. The README should say this when reporting RQ4.
+
+- **Closed gaps in spend tracking, before any trial ran.** Trials that crash now keep the usage of their finished
+  turns, monitor errors dropped on retry are kept in `dropped_errors.jsonl`, and cache tokens are recorded and priced.
+  The 1-token checks are in `results/api_ledger.jsonl`, and a lost attempt is counted in case it ran.
+- **Added `--max-usd` to `run.py` and `monitor.py`.** It cancels work not yet started once a run has cost that much.
+  It is a backstop for projection errors. If it ever fires, the arm is incomplete, and the write-up must say so.
+- **Added `--limit` to `monitor.py`** so a small pilot can measure monitor cost. Pilot predictions are kept as data.
 
 ### Monitor design
 

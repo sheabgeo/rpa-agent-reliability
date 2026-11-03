@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from .analyze import wilson
-from .pricing import cost_usd
+from .pricing import add_usage, cost_usd
 from .run import SOP_VARIANTS
 
 VIEWS = ("report_only", "full_transcript")
@@ -129,35 +129,56 @@ def call_monitor(client, model: str, trial: dict, view: str) -> dict:
     base = {"key": trial_key(trial), "view": view, "model": model, "origin": origin_of(trial),
             "mutation": trial.get("mutation"), "scenario": trial["scenario"], "agent": trial["agent"],
             "sop": trial["sop"], "trial": trial["trial"], "codes": sorted({f["code"] for f in trial["failures"]})}
+    usage = {}
     try:
         resp = client.messages.create(
             model=model, max_tokens=16000, system=INSTRUCTIONS,
             messages=[{"role": "user", "content": render_view(trial, view)}],
             output_config={"format": {"type": "json_schema", "schema": SCHEMA}})
-        usage = {"input_tokens": resp.usage.input_tokens, "output_tokens": resp.usage.output_tokens}
+        add_usage(usage, resp.usage)
         if resp.stop_reason != "end_turn":
             return {**base, "usage": usage, "error": f"stop_reason={resp.stop_reason}"}
         text = next(b.text for b in resp.content if b.type == "text")
         return {**base, "usage": usage, "prediction": json.loads(text)}
     except Exception as exc:  # keep the batch alive; errors are excluded from metrics and counted
-        return {**base, "usage": {}, "error": repr(exc)}
+        return {**base, "usage": usage, "error": repr(exc)}
 
 
-def run_monitor(trials: list[dict], client, model: str, out: Path, workers: int = 4) -> list[dict]:
+def run_monitor(trials: list[dict], client, model: str, out: Path, workers: int = 4,
+                limit: int | None = None, max_usd: float | None = None) -> list[dict]:
+    """Sorting by trial key keeps both views of a trial together and makes a `limit` pilot a stable pseudo-random subset."""
     done = set()
+    out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():
-        kept = [r for r in load_trials([out]) if "error" not in r]
+        rows = load_trials([out])
+        kept = [r for r in rows if "error" not in r]
+        dropped = [r for r in rows if "error" in r]
+        if dropped:  # errors are retried, but any tokens they used were still billed
+            with open(out.parent / "dropped_errors.jsonl", "a", encoding="utf-8") as f:
+                f.write("".join(json.dumps(r) + "\n" for r in dropped))
         done = {(r["key"], r["view"]) for r in kept}
         out.write_text("".join(json.dumps(r) + "\n" for r in kept), encoding="utf-8")
-    jobs = [(t, v) for t in eligible(trials) for v in VIEWS if (trial_key(t), v) not in done]
+    jobs = sorted(((t, v) for t in eligible(trials) for v in VIEWS if (trial_key(t), v) not in done),
+                  key=lambda job: (trial_key(job[0]), job[1]))
+    if limit is not None:
+        jobs = jobs[:limit]
     new = []
-    out.parent.mkdir(parents=True, exist_ok=True)
+    spent = 0.0
     with ThreadPoolExecutor(max_workers=workers) as pool, open(out, "a", encoding="utf-8") as f:
-        for fut in as_completed([pool.submit(call_monitor, client, model, t, v) for t, v in jobs]):
+        futs = [pool.submit(call_monitor, client, model, t, v) for t, v in jobs]
+        for fut in as_completed(futs):
+            if fut.cancelled():
+                continue
             r = fut.result()
             f.write(json.dumps(r) + "\n")
             f.flush()
             new.append(r)
+            spent += cost_usd(model, r.get("usage")) or 0
+            if max_usd is not None and spent >= max_usd:
+                for other in futs:
+                    other.cancel()
+    if len(new) < len(jobs):
+        print(f"STOPPED AT BUDGET BACKSTOP: {len(jobs) - len(new)} predictions not started after ${spent:.4f}.")
     return new
 
 
@@ -257,13 +278,16 @@ def main():
     r.add_argument("--model", default=DEFAULT_MODEL)
     r.add_argument("--workers", type=int, default=4)
     r.add_argument("--out", default="results/monitor/predictions.jsonl")
+    r.add_argument("--limit", type=int, help="only this many new predictions, for a cost pilot")
+    r.add_argument("--max-usd", type=float, help="backstop: cancel predictions not yet started after this much")
     s = sub.add_parser("report")
     s.add_argument("predictions")
     s.add_argument("--out", default="results/MONITOR.md")
     a = ap.parse_args()
     if a.cmd == "run":
         import anthropic
-        new = run_monitor(load_trials(a.files), anthropic.Anthropic(max_retries=6), a.model, Path(a.out), a.workers)
+        new = run_monitor(load_trials(a.files), anthropic.Anthropic(max_retries=6), a.model, Path(a.out), a.workers,
+                          a.limit, a.max_usd)
         print(f"{len(new)} predictions written, {sum('error' in x for x in new)} errors. Results: {a.out}")
     else:
         text = report(load_trials([a.predictions]))

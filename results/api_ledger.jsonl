@@ -1,0 +1,4 @@
+{"note": "Phase 0 model ID check, 2026-11-03: confirmed response", "model": "claude-haiku-5-5", "input_tokens": 10, "output_tokens": 1}
+{"note": "Phase 0 model ID check, 2026-11-03: confirmed response", "model": "claude-sonnet-5-5", "input_tokens": 10, "output_tokens": 1}
+{"note": "Phase 0 model ID check, 2026-11-03: earlier attempt whose output was lost; counted in case it ran", "model": "claude-haiku-5-5", "input_tokens": 10, "output_tokens": 1}
+{"note": "Phase 0 model ID check, 2026-11-03: earlier attempt whose output was lost; counted in case it ran", "model": "claude-sonnet-5-5", "input_tokens": 10, "output_tokens": 1}

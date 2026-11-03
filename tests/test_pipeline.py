@@ -1,10 +1,12 @@
 """Offline tests for run/regrade/mutate/monitor. No API key needed. Run: python -m tests.test_pipeline"""
 import json
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 from agents.scripted import AGENTS
+from rpa_eval.budget import load_all, project, summarize
 from rpa_eval.env import Env
 from rpa_eval.graders import grade
 from rpa_eval.monitor import (confusion, eligible, events, mcnemar_exact, origin_of, render_view, report,
@@ -236,6 +238,91 @@ def test_monitor_run_resumes_errors_and_report_counts_them():
     payload = client.seen[0]
     assert payload["output_config"]["format"]["type"] == "json_schema"
     assert "failures" not in payload["messages"][0]["content"]
+
+
+class BoomClient:
+    """Answers one turn, then fails, like an API error partway through a trial."""
+
+    def __init__(self, scn):
+        self.inner = ReplayClient(scn)
+        self.messages = self
+        self.n = 0
+
+    def create(self, **kw):
+        self.n += 1
+        if self.n > 1:
+            raise RuntimeError("boom")
+        return self.inner.create(**kw)
+
+
+def test_crashed_trial_keeps_usage_already_billed():
+    scn = BY_ID["S01_clean"]
+    try:
+        run_trial(scn, 0, "claude", "claude-sonnet-5-5", "full", BoomClient(scn))
+    except RuntimeError as exc:
+        assert exc.partial_usage["input_tokens"] == 1000
+    else:
+        raise AssertionError("expected the failure to propagate")
+
+
+def test_cache_tokens_are_priced():
+    assert abs(cost_usd("claude-sonnet-5-5", {"cache_read_input_tokens": 1_000_000}) - 0.20) < 1e-9
+    assert abs(cost_usd("claude-sonnet-5-5", {"cache_creation_input_tokens": 1_000_000}) - 2.50) < 1e-9
+
+
+def test_budget_counts_every_source_once_and_gates_on_the_cap():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        t = api_trial("S01_clean")
+        trial_cost = cost_usd("claude-sonnet-5-5", t["usage"])
+        infra = {"scenario": "S02_amount_mismatch", "trial": 0, "agent": "claude-sonnet-5-5", "sop": "full",
+                 "infra_error": "boom", "usage": {"input_tokens": 1_000_000}}
+        mutant = mutate_trial(t, "control_summary")
+        mutant["origin"] = "mutated"
+        for name, rows in (("a", [t, infra]), ("b", [t, mutant])):  # the repeated trial must count once
+            (root / "runs" / name).mkdir(parents=True)
+            write_rows(root / "runs" / name / "trials.jsonl", rows)
+        (root / "results" / "monitor").mkdir(parents=True)
+        pred = {"model": "claude-sonnet-5-5", "usage": {"output_tokens": 100_000}}
+        (root / "results" / "monitor" / "predictions.jsonl").write_text(json.dumps(pred) + "\n", encoding="utf-8")
+        (root / "results" / "monitor" / "dropped_errors.jsonl").write_text(json.dumps(pred) + "\n", encoding="utf-8")
+        (root / "results" / "api_ledger.jsonl").write_text(
+            json.dumps({"model": "claude-sonnet-5-5", "input_tokens": 500_000}) + "\n", encoding="utf-8")
+        s = summarize(load_all(root))
+        assert abs(s["total"] - (trial_cost + 2.0 + 1.0 + 1.0 + 1.0)) < 1e-9
+        assert s["infra_errors"] == 1
+        assert project(s, {}, 0, cap=100)["go"]
+        assert not project(s, {"claude-sonnet-5-5": 1000}, 0, cap=1)["go"]
+        try:
+            project(s, {"claude-haiku-5-5": 1}, 0)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("must refuse to project with no measurements")
+
+
+class SlowMonitorClient(FakeMonitorClient):
+    """Has some latency, as a real API does, so that the budget backstop can cancel work not yet started."""
+
+    def __init__(self):
+        super().__init__(fail_first=False)
+
+    def create(self, **kw):
+        time.sleep(0.2)
+        return super().create(**kw)
+
+
+def test_monitor_keeps_usage_of_retried_errors_and_honors_limit_and_cap():
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "monitor" / "predictions.jsonl"
+        out.parent.mkdir()
+        trials = [api_trial("S01_clean", i) for i in range(3)]
+        err = {"key": "x", "view": "report_only", "model": "claude-sonnet-5-5", "error": "e", "usage": {"input_tokens": 5}}
+        out.write_text(json.dumps(err) + "\n", encoding="utf-8")
+        assert len(run_monitor(trials, FakeMonitorClient(), "claude-sonnet-5-5", out, 1, limit=2)) == 2
+        assert json.loads((out.parent / "dropped_errors.jsonl").read_text(encoding="utf-8"))["usage"]["input_tokens"] == 5
+        capped = run_monitor(trials, SlowMonitorClient(), "claude-sonnet-5-5", out, 1, max_usd=0.0001)
+        assert 1 <= len(capped) < 4
 
 
 def test_trial_key_is_stable_and_content_based():

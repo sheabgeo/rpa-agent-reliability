@@ -86,11 +86,11 @@ def main():
             L.append(f"| `{code}` | {meaning} | " + " | ".join(map(str, counts)) + " |")
 
     L += ["", "## Estimated cost", "",
-          "From stored token usage and `rpa_eval/pricing.py`. Trials that ended in an infra error store no usage, "
-          "so their tokens are not counted.", "", "| Agent | SOP | Estimated USD |", "|---|---|---|"]
+          "From stored token usage and `rpa_eval/pricing.py`, including tokens used before any infra error. "
+          "This covers agent trials only. See `rpa_eval/budget.py` and `results/NOTES.md` for total spend.", "", "| Agent | SOP | Estimated USD |", "|---|---|---|"]
     total = 0.0
     for ag, sop in arms:
-        costs = [cost_usd(ag, r.get("usage")) for r in rows if (r["agent"], r["sop"]) == (ag, sop)]
+        costs = [cost_usd(ag, r.get("usage")) for r in rows + infra if (r["agent"], r["sop"]) == (ag, sop)]
         if None in costs:
             L.append(f"| {ag} | {sop} | unknown (no price for this model) |")
             continue

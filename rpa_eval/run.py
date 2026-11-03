@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .env import SOP, TOOL_SCHEMAS, Env
 from .graders import grade
+from .pricing import PRICES_PER_MTOK, add_usage, cost_usd
 from .scenarios import SCENARIOS
 from .scenarios_paraphrase import PARAPHRASES
 
@@ -31,10 +32,13 @@ def run_claude(env: Env, model: str, system: str, client) -> dict:
     usage = {"input_tokens": 0, "output_tokens": 0}
     stop = "max_turns"
     for _ in range(MAX_TURNS):
-        resp = client.messages.create(model=model, max_tokens=16000, system=system,
-                                      tools=TOOL_SCHEMAS, messages=messages)
-        usage["input_tokens"] += resp.usage.input_tokens
-        usage["output_tokens"] += resp.usage.output_tokens
+        try:
+            resp = client.messages.create(model=model, max_tokens=16000, system=system,
+                                          tools=TOOL_SCHEMAS, messages=messages)
+        except Exception as exc:
+            exc.partial_usage = usage  # earlier turns were already billed, so keep them for the budget
+            raise
+        add_usage(usage, resp.usage)
         content = [b.model_dump(exclude_none=True) for b in resp.content]
         messages.append({"role": "assistant", "content": content})
         tool_uses = [b for b in resp.content if b.type == "tool_use"]
@@ -95,12 +99,15 @@ def main():
     ap.add_argument("--sop", default="full", choices=sorted(SOP_VARIANTS))
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", default="runs")
+    ap.add_argument("--max-usd", type=float, help="backstop: cancel trials not yet started once this run has cost this much")
     a = ap.parse_args()
 
     pool_scns = PARAPHRASES if a.scenario_set == "paraphrase" else SCENARIOS
     scns = pool_scns if a.scenarios == "all" else [s for s in pool_scns if s["id"] in a.scenarios.split(",")]
     client = None
     if a.agent == "claude":
+        if a.max_usd is not None and a.model not in PRICES_PER_MTOK:
+            ap.error(f"--max-usd needs a known price for {a.model}")
         import anthropic
         client = anthropic.Anthropic(max_retries=6)
 
@@ -110,22 +117,33 @@ def main():
     if a.pairs:
         wanted = {tuple(p.rsplit(":", 1)) for p in a.pairs.split(",")}
         jobs = [(s, int(t)) for s in pool_scns for sid, t in sorted(wanted) if s["id"] == sid]
-    n_pass = 0
+    n_pass = n_cancelled = 0
+    run_cost = 0.0
     with ThreadPoolExecutor(max_workers=a.workers) as pool, open(out / "trials.jsonl", "w") as f:
         futs = {pool.submit(run_trial, s, t, a.agent, a.model, a.sop, client): (s["id"], t) for s, t in jobs}
         for fut in as_completed(futs):
             sid, t = futs[fut]
+            if fut.cancelled():
+                n_cancelled += 1
+                continue
             try:
                 r = fut.result()
             except Exception as exc:  # keep the batch alive; record infra errors separately
-                r = {"scenario": sid, "trial": t, "agent": label, "sop": a.sop, "infra_error": repr(exc)}
+                r = {"scenario": sid, "trial": t, "agent": label, "sop": a.sop, "infra_error": repr(exc),
+                     "usage": getattr(exc, "partial_usage", {})}
             f.write(json.dumps(r) + "\n")
             f.flush()
             ok = "infra_error" not in r and not r["failures"]
             n_pass += ok
             codes = ",".join(x["code"] for x in r.get("failures", [])) or ("INFRA" if "infra_error" in r else "")
             print(f"{sid:24s} trial {t}  {'PASS' if ok else 'FAIL'}  {codes}")
-    print(f"\n{n_pass}/{len(jobs)} passed. Results: {out/'trials.jsonl'}")
+            run_cost += cost_usd(r["agent"], r.get("usage")) or 0
+            if a.max_usd is not None and run_cost >= a.max_usd:
+                for other in futs:
+                    other.cancel()
+    if n_cancelled:
+        print(f"\nSTOPPED AT BUDGET BACKSTOP: {n_cancelled} trials not started after ${run_cost:.4f}.")
+    print(f"\n{n_pass}/{len(jobs) - n_cancelled} passed. Results: {out/'trials.jsonl'}")
 
 
 if __name__ == "__main__":
