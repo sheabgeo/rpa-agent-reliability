@@ -5,13 +5,15 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import math
 from collections import Counter, defaultdict
 from pathlib import Path
 
 from .graders import FAILURE_CODES
-from .scenarios import BY_ID
+from .pricing import cost_usd
+from .scenarios_paraphrase import ALL_BY_ID
 
 
 def wilson(k, n, z=1.96):
@@ -27,7 +29,8 @@ def wilson(k, n, z=1.96):
 def load(paths):
     rows = []
     for p in paths:
-        for line in Path(p).read_text().splitlines():
+        text = gzip.open(p, "rt", encoding="utf-8").read() if str(p).endswith(".gz") else Path(p).read_text(encoding="utf-8")
+        for line in text.splitlines():
             if line.strip():
                 rows.append(json.loads(line))
     return rows
@@ -69,7 +72,7 @@ def main():
             rs = cell[(ag, sop, sid)]
             k = sum(not r["failures"] for r in rs)
             cells.append(f"{k}/{len(rs)}" if rs else "-")
-        L.append(f"| {sid} | {BY_ID[sid]['probes']} | " + " | ".join(cells) + " |")
+        L.append(f"| {sid} | {ALL_BY_ID[sid]['probes']} | " + " | ".join(cells) + " |")
 
     L += ["", "## Failure catalog", "", "Counts are trials exhibiting the failure at least once.", "",
           "| Code | Meaning | " + " | ".join(f"{a}/{s}" for a, s in arms) + " |", "|---|---|" + "---|" * len(arms)]
@@ -82,6 +85,19 @@ def main():
         if any(counts):
             L.append(f"| `{code}` | {meaning} | " + " | ".join(map(str, counts)) + " |")
 
+    L += ["", "## Estimated cost", "",
+          "From stored token usage and `rpa_eval/pricing.py`. Trials that ended in an infra error store no usage, "
+          "so their tokens are not counted.", "", "| Agent | SOP | Estimated USD |", "|---|---|---|"]
+    total = 0.0
+    for ag, sop in arms:
+        costs = [cost_usd(ag, r.get("usage")) for r in rows if (r["agent"], r["sop"]) == (ag, sop)]
+        if None in costs:
+            L.append(f"| {ag} | {sop} | unknown (no price for this model) |")
+            continue
+        total += sum(costs)
+        L.append(f"| {ag} | {sop} | ${sum(costs):.2f} |")
+    L.append(f"| **Total** | | **${total:.2f}** |")
+
     L += ["", "## Example failures", ""]
     seen = set()
     for r in rows:
@@ -93,7 +109,7 @@ def main():
             L.append(f"- **{r['scenario']}** · {r['agent']}/{r['sop']} · `{f['code']}`: {f['detail']}")
 
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(a.out).write_text("\n".join(L) + "\n")
+    Path(a.out).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 
 

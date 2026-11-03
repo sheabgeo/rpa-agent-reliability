@@ -145,7 +145,7 @@ class Env:
         else:
             try:
                 result = getattr(self, name)(**args)
-            except TypeError as exc:
+            except (TypeError, ValueError, AttributeError) as exc:
                 result = {"error": f"bad arguments: {exc}"}
         self.calls.append({"tool": name, "args": args, "result": result})
         return result
