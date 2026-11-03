@@ -1,0 +1,4 @@
+Spent: $15.1360 of $20.00 (trials $10.2330, monitor $4.9030, other $0.0001). Infra errors: 0. Largest prompt: 6,042 tokens.
+  claude-haiku-5-5: 72 trials, mean $0.0020, max $0.0033
+  claude-sonnet-5-5: 252 trials, mean $0.0400, max $0.0632
+  monitor: 734 predictions, mean $0.0067, max $0.0173
