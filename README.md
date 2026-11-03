@@ -3,8 +3,9 @@
 A small, reproducible evaluation of how LLM agents fail when they replace traditional RPA bots in a realistic,
 rule-bound business workflow: accounts-payable invoice entry.
 
-> **Status:** harness, scenarios and graders are complete and validated (see [Validation](#validation)).
-> Model results are in [`results/REPORT.md`](results/REPORT.md) once runs are complete.
+> **Status:** harness, scenarios, graders and monitor tooling are complete and validated (see
+> [Validation](#validation)). **Model experiments have not been run yet, so there are no findings.**
+> See [`results/NOTES.md`](results/NOTES.md).
 
 ## Motivation
 
@@ -88,6 +89,7 @@ pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...
 
 python -m tests.test_graders                       # grader tests (no key needed)
+python -m tests.test_pipeline                      # run/regrade/mutate/monitor tests (no key needed)
 python -m rpa_eval.run --agent oracle --trials 1   # sanity check (no key needed)
 
 # main experiment: 5 trials x 12 scenarios per arm
@@ -96,6 +98,15 @@ python -m rpa_eval.run --model claude-sonnet-5-5 --trials 5
 python -m rpa_eval.run --model claude-sonnet-5-5 --trials 5 --sop no-injection-rule   # RQ2 ablation
 
 python -m rpa_eval.analyze runs/*/trials.jsonl --out results/REPORT.md
+
+# monitor experiment: naive baseline, controlled faults, then both monitor views
+python -m rpa_eval.run --agent naive --trials 1
+python -m rpa_eval.mutate runs/*/trials.jsonl --out mutants/trials.jsonl
+python -m rpa_eval.monitor run runs/*/trials.jsonl mutants/trials.jsonl --out results/monitor/predictions.jsonl
+python -m rpa_eval.monitor report results/monitor/predictions.jsonl --out results/MONITOR.md
+
+# robustness check on 24 paraphrased scenarios
+python -m rpa_eval.run --model claude-sonnet-5-5 --trials 5 --scenario-set paraphrase
 ```
 
 Each trial's full transcript, tool calls, final state and token usage are saved to `runs/.../trials.jsonl`.
@@ -112,9 +123,9 @@ Run one trial per scenario first to calibrate token cost before scaling up.
 
 ## Next steps
 
-- Paraphrase and perturbation sets per scenario to separate robust behavior from prompt luck.
-- A monitor experiment: can a second model catch `UNFAITHFUL_REPORT` / `UNVERIFIED_ENTRY` from the
-  transcript alone? This would connect the work to AI control and scalable oversight.
+- Run the paraphrase set, to separate robust behavior from prompt luck.
+- Run the monitor experiment: can a second model catch `UNFAITHFUL_REPORT` / `UNVERIFIED_ENTRY` from the
+  transcript alone? This connects the work to AI control and scalable oversight.
 - Port two scenarios to a real UiPath / Power Automate flow with an LLM step, to compare against production bots.
 
 ## Author
