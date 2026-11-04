@@ -78,7 +78,7 @@ Decisions:
 |---|---|---|---|---|
 | Before v2 Haiku pilot | $15.14 | 36 trials | Under $1, with a $1 backstop | Go. Cost $0.12 |
 | Before v2 Sonnet pilot | $15.26 | 36 trials | $3.07, assuming 20x Haiku's measured cost, with a $4 backstop | Go at 3 trials. Cost $2.16 |
-| Before v2 confirmatory run | $17.42 | 60 Haiku and 60 Sonnet trials | $6.12 of the $11.64 total plan, with backstops of $0.50 and $3.50 per run | Go. Stopped early by the API account, see below |
+| Before v2 confirmatory run | $17.42 | 60 Haiku and 60 Sonnet trials | $6.19 of the $11.64 total plan, with backstops of $0.50 and $3.50 per run | Go. Stopped early by the API account, see below |
 
 ### v2 pilot transcript review
 
