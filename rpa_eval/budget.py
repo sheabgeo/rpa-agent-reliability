@@ -21,7 +21,8 @@ from .pricing import cost_usd
 CAP_USD = 30.0  # v1 ran under $20; the author raised the total to $30 for v2 on 2026-11-04
 MARGIN = 0.25  # added to projections, because trial costs vary and calibration n is small
 TRIAL_GLOBS = ("runs/*/trials.jsonl", "results/data/*.jsonl.gz", "results/data_v2/*.jsonl.gz")
-MONITOR_GLOBS = ("results/monitor/predictions*.jsonl", "results/monitor/dropped_errors.jsonl")
+MONITOR_GLOBS = ("results/monitor/predictions*.jsonl", "results/monitor/dropped_errors.jsonl",
+                 "results/monitor_v2/predictions*.jsonl", "results/monitor_v2/dropped_errors.jsonl")
 LEDGER = "results/api_ledger.jsonl"
 
 

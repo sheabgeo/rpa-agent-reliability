@@ -109,6 +109,27 @@ These assume a v2 trial costs about 3x a v1 trial. Before each step, spend and p
 and no run starts unless it fits under the cap. If the confirmatory run does not fit, trials per cell drop, with 10 as the
 minimum.
 
+## Amendment, 2026-11-04: after the pilot, before any confirmatory trial
+
+The pilot selected V05 and V10 on Haiku's results, so the preregistered rule says to continue with 2 scenarios. Sonnet reached
+the upgrade gate with 3 harmful failures, all on V10. Measured costs showed a Sonnet arm fits under the existing $30 cap, so no
+higher cap is needed. The author approved the Sonnet arm on 2026-11-04.
+
+- **Added.** Sonnet runs the same confirmatory design as Haiku: 15 trials per scenario per condition, on the same 2 scenarios,
+  which were selected on Haiku's pilot and not on Sonnet's.
+- **Q1 is tested per model,** with Haiku's as planned and Sonnet's added. There is no correction for testing two models, and no
+  pooled test.
+- **Monitors and labels** cover trials from both models. The monitors read all 120 trials, in both views. Q2 and Q3 are reported
+  for all trials together and for each agent model.
+- **Added to Q2:** recall on harmful failures only, marked as secondary.
+- **Q3 also reports the best possible share.** If failures are common, a 5% audit cannot catch most of them under any ranking,
+  so the raw share would mislead without it.
+- **Known weakness.** Blinding is limited on this sample. With only 2 scenarios, the author can tell which is which, and an
+  agent's report may mention a payment deadline, which could reveal the condition. Reports cannot be edited without changing the data.
+- **Unchanged.** Selection, outcomes, tests, and the cut order if the budget runs short.
+
+Projected, from measured pilot costs and v1's largest Sonnet monitor prediction: $9.31, or $11.64 with margin, for a total of $29.06.
+
 ## Integrity rules
 
 The rules in `CLAUDE.md` apply. Graders and scenarios do not change to favor a result. A genuine grader bug gets a fix, a test, an
