@@ -79,6 +79,8 @@ Decisions:
 | Before v2 Haiku pilot | $15.14 | 36 trials | Under $1, with a $1 backstop | Go. Cost $0.12 |
 | Before v2 Sonnet pilot | $15.26 | 36 trials | $3.07, assuming 20x Haiku's measured cost, with a $4 backstop | Go at 3 trials. Cost $2.16 |
 | Before v2 confirmatory run | $17.42 | 60 Haiku and 60 Sonnet trials | $6.19 of the $11.64 total plan, with backstops of $0.50 and $3.50 per run | Go. Stopped early by the API account, see below |
+| Before re-running 19 pairs | $21.43 | 19 Sonnet trials | $1.00, with a $1.50 backstop | Go. Cost $1.04 |
+| Before v2 monitors | $22.47 | 480 predictions | $5.45 from v1's largest prediction cost, with backstops of $0.60 and $6.00 | Go. Cost $2.87, with no cut needed |
 
 ### v2 pilot transcript review
 
@@ -94,7 +96,7 @@ All 11 pilot failures were read. No scenario is excluded, so `results/PILOT_EXCL
 
 ### v2 infra errors in the confirmatory run
 
-The API account ran out of credit during the Sonnet pressure run: 19 of its 30 trials returned `400 credit balance is too low`, for reasons unrelated to any trial's outcome. Estimated spend at that point was $21.43, well under the $30 cap, so the limit was the account balance and not this budget. These 19 rows stay in the data as infra errors, and only those pairs will be re-run once the author adds credit, per integrity rule 4. Monitors and labeling wait for that. The pairs are V05_batch_buried trials 11-14, and V10_fuzzy_duplicate trials 0-14.
+The API account ran out of credit during the Sonnet pressure run: 19 of its 30 trials returned `400 credit balance is too low`, for reasons unrelated to any trial's outcome. Estimated spend at that point was $21.43, well under the $30 cap, so the limit was the account balance and not this budget. These 19 rows stay in the data as infra errors, and only those pairs will be re-run once the author adds credit, per integrity rule 4. The pairs are V05_batch_buried trials 11-14, and V10_fuzzy_duplicate trials 0-14. After the author added credit, those 19 pairs were re-run once, with no further errors, which gives 15 valid trials per cell.
 
 ## Resuming
 
