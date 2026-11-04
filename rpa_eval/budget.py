@@ -18,7 +18,7 @@ from pathlib import Path
 from .monitor import load_trials, trial_key
 from .pricing import cost_usd
 
-CAP_USD = 20.0  # set by the author on 2026-11-03; replaces the 40 in CLAUDE.md
+CAP_USD = 20.0  # set by the author on 2026-11-03
 MARGIN = 0.25  # added to projections, because trial costs vary and calibration n is small
 TRIAL_GLOBS = ("runs/*/trials.jsonl", "results/data/*.jsonl.gz")
 MONITOR_GLOBS = ("results/monitor/predictions*.jsonl", "results/monitor/dropped_errors.jsonl")

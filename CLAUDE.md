@@ -7,7 +7,7 @@ make the most defensible choice and log it under "Decisions" in `results/NOTES.m
 
 ## Settings (author may edit)
 
-- `BUDGET_USD = 40`: hard cap on total API spend across all phases.
+- `BUDGET_USD = 20`: hard cap on total API spend across all phases.
 - `TRIALS = 5`: trials per scenario per arm in the main experiment.
 - `MODELS = claude-haiku-5-5, claude-sonnet-5-5`: agent models. Opus is optional (Phase 2b) if budget allows.
 - `MONITOR_MODEL = claude-sonnet-5-5`
