@@ -20,8 +20,10 @@ from .graders_v2 import grade_v2
 from .pricing import PRICES_PER_MTOK, cost_usd
 from .run import SOP_VARIANTS, new_run_dir, run_claude
 from .scenarios_v2 import KICKOFFS, V2_SCENARIOS
+from .scenarios_v2_variants import V2_VARIANTS
 
 MAX_TURNS_V2 = 80  # the ten-invoice batch needs more turns than any v1 scenario
+HIDDEN_PHASES = ("confirm", "robust")
 
 
 def run_trial_v2(scn: dict, trial: int, agent: str, model: str, condition: str, phase: str, client) -> dict:
@@ -47,7 +49,8 @@ def main():
     ap.add_argument("--agent", default="claude", help="claude | oracle | naive")
     ap.add_argument("--model", default="claude-haiku-5-5")
     ap.add_argument("--condition", default="pressure", choices=sorted(KICKOFFS))
-    ap.add_argument("--phase", default="pilot", choices=["pilot", "confirm", "check"])
+    ap.add_argument("--phase", default="pilot", choices=["pilot", "confirm", "robust", "check"])
+    ap.add_argument("--scenario-set", default="main", choices=["main", "variants"])
     ap.add_argument("--trials", type=int, default=3)
     ap.add_argument("--scenarios", default="all", help="comma-separated ids or 'all'")
     ap.add_argument("--pairs", default="", help="re-run only these pairs after infra errors, e.g. V01_erp_outage:0")
@@ -56,7 +59,8 @@ def main():
     ap.add_argument("--max-usd", type=float, help="backstop: cancel trials not yet started once this run has cost this much")
     a = ap.parse_args()
 
-    scns = V2_SCENARIOS if a.scenarios == "all" else [s for s in V2_SCENARIOS if s["id"] in a.scenarios.split(",")]
+    pool_scns = V2_VARIANTS if a.scenario_set == "variants" else V2_SCENARIOS
+    scns = pool_scns if a.scenarios == "all" else [s for s in pool_scns if s["id"] in a.scenarios.split(",")]
     client = None
     if a.agent == "claude":
         if a.max_usd is not None and a.model not in PRICES_PER_MTOK:
@@ -69,7 +73,7 @@ def main():
     jobs = [(s, t) for s in scns for t in range(a.trials)]
     if a.pairs:
         wanted = {tuple(p.rsplit(":", 1)) for p in a.pairs.split(",")}
-        jobs = [(s, int(t)) for s in V2_SCENARIOS for sid, t in sorted(wanted) if s["id"] == sid]
+        jobs = [(s, int(t)) for s in pool_scns for sid, t in sorted(wanted) if s["id"] == sid]
     n_pass = n_cancelled = 0
     run_cost = 0.0
     with ThreadPoolExecutor(max_workers=a.workers) as pool, open(out / "trials.jsonl", "w") as f:
@@ -88,7 +92,7 @@ def main():
             f.flush()
             ok = "infra_error" not in r and not r["failures"]
             n_pass += ok
-            if a.phase != "confirm":  # confirmatory outcomes stay out of the console until the author's labels are committed
+            if a.phase not in HIDDEN_PHASES:  # these outcomes stay out of the console until the author's labels are committed
                 codes = ",".join(x["code"] for x in r.get("failures", [])) or ("INFRA" if "infra_error" in r else "")
                 print(f"{sid:26s} trial {t}  {'PASS' if ok else 'FAIL'}  {codes}")
             run_cost += cost_usd(r["agent"], r.get("usage")) or 0
@@ -98,7 +102,7 @@ def main():
     if n_cancelled:
         print(f"\nSTOPPED AT BUDGET BACKSTOP: {n_cancelled} trials not started after ${run_cost:.4f}.")
     done = len(jobs) - n_cancelled
-    print(f"\n{done} trials, ${run_cost:.4f}." + ("" if a.phase == "confirm" else f" {n_pass}/{done} passed.") + f" Results: {out / 'trials.jsonl'}")
+    print(f"\n{done} trials, ${run_cost:.4f}." + ("" if a.phase in HIDDEN_PHASES else f" {n_pass}/{done} passed.") + f" Results: {out / 'trials.jsonl'}")
 
 
 if __name__ == "__main__":

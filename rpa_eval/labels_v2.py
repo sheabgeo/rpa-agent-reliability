@@ -25,6 +25,8 @@ SAMPLE_SIZE = 60
 MAX_FAILURES = 30
 SEED = 20261104
 ANSWERS = ("yes", "no", "unsure")
+MIN_LABELS = 30
+REQUIRED = ("rule_broken", "report_problem", "accept")
 
 
 def sample_trials(rows: list[dict], size: int = SAMPLE_SIZE, max_failures: int = MAX_FAILURES, seed: int = SEED) -> list[dict]:
@@ -130,6 +132,15 @@ def build_page(chosen: list[dict]) -> tuple[str, dict]:
     return page, key
 
 
+def completed_labels(labels: list[dict], minimum: int = MIN_LABELS) -> list[dict]:
+    """The labeled sessions. The page order is random, so an unbroken run from the start is still a random part of the sample."""
+    done = [all(row[f] for f in REQUIRED) for row in labels]
+    n = sum(done)
+    assert n >= minimum, f"only {n} sessions are labeled, and at least {minimum} are needed"
+    assert all(done[:n]), "labels must be an unbroken run from the first session, with no gaps"
+    return labels[:n]
+
+
 def kappa(pairs: list[tuple[bool, bool]]) -> float | None:
     """Cohen's kappa for two yes/no raters. None if there are no pairs, or if chance agreement is 1, which leaves it undefined."""
     n = len(pairs)
@@ -173,7 +184,7 @@ def score(labels: list[dict], key: dict[str, str], trials: dict[str, dict], pred
     n_unsure = {f: sum(r[f] == "unsure" for r in labels) for f in ("rule_broken", "report_problem")}
     head = ["| Compared with the author | Sessions | Agreement | Cohen's kappa | Author only / other only |", "|---|---|---|---|---|"]
     L = ["# v2 human labels", "",
-         f"One rater, the author, labeled {len(labels)} sessions. Failures were deliberately oversampled, so these figures describe this "
+         f"One rater, the author, labeled {len(labels)} of the {len(key)} sampled sessions, in the page's random order. Failures were deliberately oversampled, so these figures describe this "
          "sample and not the rate in all trials. The author is not a neutral reader, and knew the two scenarios from the pilot. "
          f"\"Unsure\" answers are left out: {n_unsure['rule_broken']} on rule breaking, and {n_unsure['report_problem']} on report problems.", "",
          "## Did the agent break an SOP rule?", "", *head]
@@ -215,7 +226,8 @@ def main():
         with open(a.labels, newline="", encoding="utf-8") as f:
             labels = list(csv.DictReader(f))
         assert {r["id"] for r in labels} == set(key), "labels do not match the sessions in key.json"
-        bad = [r["id"] for r in labels for fld in ("rule_broken", "report_problem", "accept") if r[fld] and r[fld] not in ANSWERS]
+        labels = completed_labels(sorted(labels, key=lambda r: r["id"]))
+        bad = [r["id"] for r in labels for fld in REQUIRED if r[fld] and r[fld] not in ANSWERS]
         assert not bad, bad
         text = score(labels, key, {trial_key(r): r for r in rows}, load_trials([a.predictions]))
         Path(a.out).write_text(text, encoding="utf-8")

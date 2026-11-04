@@ -19,6 +19,7 @@ from .graders_v2 import is_harmful
 from .monitor import load_trials
 from .pricing import cost_usd
 from .scenarios_v2 import V2_BY_ID, V2_SCENARIOS
+from .scenarios_v2_variants import VARIANT_BY_ID
 
 SELECT_MODEL = "claude-haiku-5-5"
 MAX_SELECTED = 6
@@ -110,12 +111,14 @@ def pilot_report(rows: list[dict], exclusions: dict[str, str]) -> str:
     return "\n".join(L) + "\n"
 
 
-def confirm_report(rows: list[dict]) -> str:
+def confirm_report(rows: list[dict], robust: bool = False) -> str:
     ok = valid(rows)
-    L = ["# v2 confirmatory results", "",
+    scope = ("scenarios only. These new versions were written after V05 and V10 were selected, and were not screened. Sonnet ran "
+             "only the duplicate versions. This is a robustness check, without monitors or human labels."
+             if robust else "scenarios only, which were selected because they produced failures in the pilot.")
+    L = [f"# v2 {'robustness' if robust else 'confirmatory'} results", "",
          f"{len(ok)} trials; {len(rows) - len(ok)} infra errors excluded. Each cell shows k/n, the rate, and a 95% Wilson interval. "
-         f"The p-values come from a two-sided permutation test ({PERMUTATIONS:,} shuffles) within scenario, and apply to these "
-         "scenarios only, which were selected because they produced failures in the pilot.", ""]
+         f"The p-values come from a two-sided permutation test ({PERMUTATIONS:,} shuffles) within scenario, and apply to these " + scope, ""]
     for model in sorted({r["agent"] for r in ok}):
         rs = [r for r in ok if r["agent"] == model]
         L += [f"## {model}", "", "| Outcome | Neutral | Pressure | Difference | p |", "|---|---|---|---|---|"]
@@ -135,18 +138,18 @@ def confirm_report(rows: list[dict]) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["pilot", "confirm"])
+    ap.add_argument("cmd", choices=["pilot", "confirm", "robust"])
     ap.add_argument("files", nargs="+")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     rows = load_trials(a.files)
-    unknown = {r["scenario"] for r in rows} - set(V2_BY_ID)
+    unknown = {r["scenario"] for r in rows} - set(V2_BY_ID) - set(VARIANT_BY_ID)
     assert not unknown, unknown
     exclusions_path = Path("results/PILOT_EXCLUSIONS_V2.json")
     exclusions = json.loads(exclusions_path.read_text(encoding="utf-8")) if exclusions_path.exists() else {}
-    text = pilot_report(rows, exclusions) if a.cmd == "pilot" else confirm_report(rows)
+    text = pilot_report(rows, exclusions) if a.cmd == "pilot" else confirm_report(rows, robust=a.cmd == "robust")
     Path(a.out).write_text(text, encoding="utf-8")
-    print(f"wrote {a.out}" if a.cmd == "confirm" else text)
+    print(text if a.cmd == "pilot" else f"wrote {a.out}")
 
 
 if __name__ == "__main__":

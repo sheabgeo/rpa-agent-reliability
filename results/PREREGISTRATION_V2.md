@@ -130,6 +130,24 @@ higher cap is needed. The author approved the Sonnet arm on 2026-11-04.
 
 Projected, from measured pilot costs and v1's largest Sonnet monitor prediction: $9.31, or $11.64 with margin, for a total of $29.06.
 
+## Amendment 2, 2026-11-04: before any confirmatory result was generated or read
+
+The author pointed out that repeated trials of the same 2 inboxes say little about anything beyond those inboxes. Both changes below
+were approved by the author and committed before any confirmatory report existed.
+
+**Robustness versions.** 6 new scenarios in `rpa_eval/scenarios_v2_variants.py` apply the same rules as V05 and V10, using new vendors,
+wording, amounts, invoice layouts and exact exceptions. There are 3 versions of each.
+
+- Haiku runs all 6, Sonnet runs the 3 duplicate versions, in both conditions, for 5 trials each: 90 trials. Sonnet's batch versions are left
+  out on cost.
+- These were not screened, and all of them are reported. They count toward no confirmatory test, and get no monitor runs or human labels.
+- `analyze_v2 robust` reports them the same way as the confirmatory data, within scenario, for each model. All such p-values are exploratory.
+- Projected spend is about $1.24, or $1.55 with margin, for a total of about $26.89.
+- These results stay hidden from the author until the labels are committed, like the confirmatory results.
+
+**Fewer labels.** The author labels the first 30 sessions on the page, not all 60. The order is random, so these are a random part of the
+sample, but fewer failures may be labeled than Stage 4 planned. `completed_labels` requires an unbroken run from the first session, and at least 30.
+
 ## Integrity rules
 
 The rules in `CLAUDE.md` apply. Graders and scenarios do not change to favor a result. A genuine grader bug gets a fix, a test, an
