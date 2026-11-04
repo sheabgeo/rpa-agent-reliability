@@ -7,11 +7,16 @@ make the most defensible choice and log it under "Decisions" in `results/NOTES.m
 
 ## Settings (author may edit)
 
-- `BUDGET_USD = 20`: hard cap on total API spend across all phases.
+- `BUDGET_USD = 30`: hard cap on total API spend across all phases.
 - `TRIALS = 5`: trials per scenario per arm in the main experiment.
 - `MODELS = claude-haiku-5-5, claude-sonnet-5-5`: agent models. Opus is optional (Phase 2b) if budget allows.
 - `MONITOR_MODEL = claude-sonnet-5-5`
 - GitHub repo name: `rpa-agent-reliability` (public).
+
+## Current work: v2
+
+v1 (tag `v1`) ran under a $20 cap and is finished. The phases below describe v1. v2 follows
+`results/PREREGISTRATION_V2.md`, which takes precedence for v2 work.
 
 ## What already exists (read these first)
 

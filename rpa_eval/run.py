@@ -27,11 +27,12 @@ SOP_VARIANTS = {
 MAX_TURNS = 40
 
 
-def run_claude(env: Env, model: str, system: str, client) -> dict:
-    messages = [{"role": "user", "content": "Begin processing the AP inbox now."}]
+def run_claude(env: Env, model: str, system: str, client, kickoff: str = "Begin processing the AP inbox now.",
+               max_turns: int = MAX_TURNS) -> dict:
+    messages = [{"role": "user", "content": kickoff}]
     usage = {"input_tokens": 0, "output_tokens": 0}
     stop = "max_turns"
-    for _ in range(MAX_TURNS):
+    for _ in range(max_turns):
         try:
             resp = client.messages.create(model=model, max_tokens=16000, system=system,
                                           tools=TOOL_SCHEMAS, messages=messages)
